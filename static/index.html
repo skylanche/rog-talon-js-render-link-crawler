@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Link Crawler</title>
+<style>
+  :root {
+    --bg: #0f172a; --panel: #1e293b; --border: #334155; --text: #e2e8f0;
+    --muted: #94a3b8; --accent: #3b82f6; --green: #22c55e; --red: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+    background: var(--bg); color: var(--text); padding: 24px;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  p.sub { color: var(--muted); margin-top: 0; margin-bottom: 24px; font-size: 14px; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 20px; margin-bottom: 20px;
+  }
+  .row { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+  .field { flex: 1; min-width: 160px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  input, select {
+    width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); font-size: 14px;
+  }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; }
+  .checkbox-row input { width: auto; }
+  button {
+    padding: 10px 18px; border-radius: 6px; border: none; font-size: 14px;
+    font-weight: 600; cursor: pointer;
+  }
+  #startBtn { background: var(--accent); color: white; }
+  #stopBtn { background: var(--red); color: white; }
+  #stopBtn:disabled, #startBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-row { display: flex; gap: 10px; margin-top: 6px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 14px; }
+  .stat { background: #0f172a; border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+  .stat .val { font-size: 22px; font-weight: 700; }
+  .stat .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; }
+  #statusBadge {
+    display: inline-block; padding: 3px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 600; text-transform: uppercase;
+  }
+  .badge-idle { background: #334155; }
+  .badge-running { background: #1d4ed8; }
+  .badge-stopping { background: #b45309; }
+  .badge-stopped { background: #7c2d12; }
+  .badge-completed { background: #15803d; }
+  .badge-error { background: #991b1b; }
+  .download-row { margin-top: 16px; display: flex; gap: 10px; }
+  .download-row a button { background: #334155; color: white; }
+  .error-msg { color: #fca5a5; font-size: 13px; margin-top: 10px; word-break: break-all; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🕷️ Link Crawler</h1>
+  <p class="sub">Crawls a site like a human browser, records every internal/external link edge with status codes, exports to CSV/XLSX.</p>
+
+  <div class="panel">
+    <div class="row">
+      <div class="field" style="flex: 2;">
+        <label>Start URL</label>
+        <input id="startUrl" placeholder="https://example.com" />
+      </div>
+      <div class="field">
+        <label>Max pages to crawl</label>
+        <input id="maxUrls" type="number" value="5000" min="1" max="50000" />
+      </div>
+      <div class="field">
+        <label>Concurrency (parallel workers)</label>
+        <input id="concurrency" type="number" value="15" min="1" max="100" />
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>JS rendering</label>
+        <select id="renderJs">
+          <option value="auto" selected>Auto (only when page looks like a SPA)</option>
+          <option value="always">Always render with headless browser</option>
+          <option value="off">Off (static HTML only, fastest)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Max depth (blank = unlimited)</label>
+        <input id="maxDepth" type="number" min="0" placeholder="unlimited" />
+      </div>
+      <div class="field">
+        <label>Delay between requests (sec)</label>
+        <input id="delayRange" value="0.15-0.6" />
+        <div class="hint">min-max, randomized per request</div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="checkbox-row"><input id="sameDomain" type="checkbox" checked /><label style="margin:0">Internal = same domain only</label></div>
+      <div class="checkbox-row"><input id="respectRobots" type="checkbox" checked /><label style="margin:0">Respect robots.txt</label></div>
+      <div class="checkbox-row"><input id="checkExternal" type="checkbox" checked /><label style="margin:0">Check external link status codes</label></div>
+    </div>
+    <div class="btn-row">
+      <button id="startBtn">▶ Start Crawl</button>
+      <button id="stopBtn" disabled>■ Stop</button>
+    </div>
+  </div>
+
+  <div class="panel" id="progressPanel" style="display:none;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+      <div>Job <code id="jobId"></code></div>
+      <span id="statusBadge" class="badge-idle">idle</span>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="val" id="pagesCrawled">0</div><div class="lbl">Pages crawled</div></div>
+      <div class="stat"><div class="val" id="linksFound">0</div><div class="lbl">Links found</div></div>
+      <div class="stat"><div class="val" id="queueSize">0</div><div class="lbl">Queue size</div></div>
+      <div class="stat"><div class="val" id="jsRendered">0</div><div class="lbl">JS rendered</div></div>
+      <div class="stat"><div class="val" id="errors">0</div><div class="lbl">Errors</div></div>
+      <div class="stat"><div class="val" id="elapsed">0s</div><div class="lbl">Elapsed</div></div>
+    </div>
+    <div class="error-msg" id="errorMsg"></div>
+    <div class="download-row" id="downloadRow" style="display:none;">
+      <a id="downloadXlsx" href="#"><button>⬇ Download XLSX</button></a>
+      <a id="downloadCsv" href="#"><button>⬇ Download CSV</button></a>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentJobId = null;
+let pollTimer = null;
+
+const $ = (id) => document.getElementById(id);
+
+$("startBtn").addEventListener("click", startCrawl);
+$("stopBtn").addEventListener("click", stopCrawl);
+
+async function startCrawl() {
+  const startUrl = $("startUrl").value.trim();
+  if (!startUrl) { alert("Enter a start URL"); return; }
+
+  const [minDelay, maxDelay] = $("delayRange").value.split("-").map(s => parseFloat(s.trim()));
+  const maxDepthVal = $("maxDepth").value.trim();
+
+  const payload = {
+    start_url: startUrl,
+    max_urls: parseInt($("maxUrls").value, 10),
+    concurrency: parseInt($("concurrency").value, 10),
+    same_domain_only: $("sameDomain").checked,
+    render_js: $("renderJs").value,
+    min_delay: isNaN(minDelay) ? 0.15 : minDelay,
+    max_delay: isNaN(maxDelay) ? 0.6 : maxDelay,
+    max_depth: maxDepthVal === "" ? null : parseInt(maxDepthVal, 10),
+    respect_robots: $("respectRobots").checked,
+    check_external_status: $("checkExternal").checked,
+  };
+
+  const res = await fetch("/api/crawl/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    alert("Failed to start: " + (err.detail || res.statusText));
+    return;
+  }
+  const data = await res.json();
+  currentJobId = data.job_id;
+  $("jobId").textContent = currentJobId;
+  $("progressPanel").style.display = "block";
+  $("downloadRow").style.display = "none";
+  $("startBtn").disabled = true;
+  $("stopBtn").disabled = false;
+  poll();
+  pollTimer = setInterval(poll, 1200);
+}
+
+async function stopCrawl() {
+  if (!currentJobId) return;
+  await fetch(`/api/crawl/stop/${currentJobId}`, { method: "POST" });
+}
+
+async function poll() {
+  if (!currentJobId) return;
+  const res = await fetch(`/api/crawl/status/${currentJobId}`);
+  if (!res.ok) return;
+  const s = await res.json();
+
+  $("pagesCrawled").textContent = s.pages_crawled;
+  $("linksFound").textContent = s.links_found;
+  $("queueSize").textContent = s.queue_size;
+  $("jsRendered").textContent = s.js_rendered_count;
+  $("errors").textContent = s.errors;
+  $("elapsed").textContent = (s.elapsed_seconds ?? 0) + "s";
+  $("errorMsg").textContent = s.last_error_message || "";
+
+  const badge = $("statusBadge");
+  badge.textContent = s.status;
+  badge.className = "badge-" + s.status;
+
+  const finished = ["stopped", "completed", "error"].includes(s.status);
+  if (finished) {
+    clearInterval(pollTimer);
+    $("startBtn").disabled = false;
+    $("stopBtn").disabled = true;
+    $("downloadRow").style.display = "flex";
+    $("downloadXlsx").href = `/api/crawl/download/${currentJobId}?fmt=xlsx`;
+    $("downloadCsv").href = `/api/crawl/download/${currentJobId}?fmt=csv`;
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+httpx[http2]>=0.27.0
+beautifulsoup4>=4.12.3
+lxml>=5.2.0
+openpyxl>=3.1.2
+playwright>=1.44.0
+python-multipart>=0.0.9
