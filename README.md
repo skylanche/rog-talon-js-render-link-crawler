@@ -10,9 +10,14 @@ Start/Stop is controlled from a simple web UI.
 
 ```bash
 cd rog-talon-js-render-link-crawler
-python3 -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
+
+py -m venv venv
+
+source venv/Scripts/activate   # Windows: venv\Scripts\activate
+
 pip install -r requirements.txt
+
+python.exe -m pip install --upgrade pip
 
 # Needed only if you want JS-rendered crawling (recommended to install anyway):
 playwright install chromium
