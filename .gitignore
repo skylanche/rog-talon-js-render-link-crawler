@@ -1,3 +1,3 @@
-data/*.csv
-data/*.xlsx
+data/
 app/__pycache__*
+.venv
